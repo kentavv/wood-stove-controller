@@ -39,6 +39,7 @@ int last_fan_pwm = 0;
 enum {TEMP_C, TEMP_F} temp_mode = TEMP_C;
 enum {FAN_MIN, FAN_AUTO, FAN_MAX} fan_mode = FAN_AUTO;
 enum {MFAN_AUTO, MFAN_LOW, MFAN_MED, MFAN_HIGH} mainfan_mode = MFAN_AUTO;
+enum {INLET_AUTO, INLET_CLOSED, INLET_OPEN} inlet_mode = INLET_AUTO;
 
 const unsigned long fan_tach_sample_dt = 1000;
 const int fan_ppr = 2; // two pulses per fan revolution
@@ -240,6 +241,19 @@ void loop() {
       break;
   }
      
+  switch (inlet_mode) {
+    case INLET_CLOSED:
+      digitalWrite(ssr3_pin, LOW);
+      break;
+    case INLET_OPEN:
+      digitalWrite(ssr3_pin, HIGH);
+      break;
+    case INLET_AUTO:
+    default:
+      digitalWrite(ssr3_pin, HIGH);
+      break;
+  }
+     
   float res[4*2];
 
   for(int i=0; i<4; i++) {
@@ -336,6 +350,12 @@ bool nextion_check_return() {
           mainfan_mode = (mainfan_mode + 1) % 4;
           if (nextion_debug) {
             Serial.println("Change mainfan_mode");
+          }
+//          last_fan_mode_change = millis();
+        } else if (comp_id == 0x10) {
+          inlet_mode = (inlet_mode + 1) % 4;
+          if (nextion_debug) {
+            Serial.println("Change inlet_mode");
           }
 //          last_fan_mode_change = millis();
         }
@@ -474,6 +494,16 @@ void update_display(float temps[4], int fan_rpm) {
         case MFAN_HIGH: sprintf(nex_buffer, "b6.txt=\"High\""); break;
         case MFAN_AUTO:
         default: sprintf(nex_buffer, "b6.txt=\"Auto\""); break;
+      }
+      send_to_nextion(nex_buffer);
+    }
+
+    {
+      switch (inlet_mode) {
+        case INLET_CLOSED: sprintf(nex_buffer, "b7.txt=\"Closed\""); break;
+        case INLET_OPEN: sprintf(nex_buffer, "b7.txt=\"Open\""); break;
+        case INLET_AUTO:
+        default: sprintf(nex_buffer, "b7.txt=\"Auto\""); break;
       }
       send_to_nextion(nex_buffer);
     }
