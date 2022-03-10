@@ -38,6 +38,7 @@ int last_fan_pwm = 0;
 
 enum {TEMP_C, TEMP_F} temp_mode = TEMP_C;
 enum {FAN_MIN, FAN_AUTO, FAN_MAX} fan_mode = FAN_AUTO;
+enum {MFAN_AUTO, MFAN_LOW, MFAN_MED, MFAN_HIGH} mainfan_mode = MFAN_AUTO;
 
 const unsigned long fan_tach_sample_dt = 1000;
 const int fan_ppr = 2; // two pulses per fan revolution
@@ -71,7 +72,10 @@ Adafruit_MAX31856 maxthermo[4] = {Adafruit_MAX31856(16, 11, 12, 13),
 // use hardware SPI, just pass in the CS pin
 //Adafruit_MAX31856 maxthermo = Adafruit_MAX31856(10);
 
-int ssr_pin = 2;
+int ssr0_pin = 2;
+int ssr1_pin = 4;
+int ssr2_pin = 6;
+int ssr3_pin = 7;
 
 void setup() {
   Serial.begin(115200);
@@ -82,7 +86,10 @@ void setup() {
     maxthermo[i].setThermocoupleType(MAX31856_TCTYPE_K);
   }
 
-  pinMode(ssr_pin, OUTPUT);
+  pinMode(ssr0_pin, OUTPUT);
+  pinMode(ssr1_pin, OUTPUT);
+  pinMode(ssr2_pin, OUTPUT);
+  pinMode(ssr3_pin, OUTPUT);
   pinMode(pwm_pin, OUTPUT);
   pinMode(tach_pin, INPUT_PULLUP);
 
@@ -209,8 +216,30 @@ void loop() {
     set_fan_speed(0);
   }
   
-  digitalWrite(ssr_pin, HIGH);
-  
+  switch (mainfan_mode) {
+    case MFAN_LOW:
+      digitalWrite(ssr1_pin, LOW);
+      digitalWrite(ssr2_pin, LOW);
+      digitalWrite(ssr0_pin, HIGH);
+      break;
+    case MFAN_MED:
+      digitalWrite(ssr0_pin, LOW);
+      digitalWrite(ssr2_pin, LOW);
+      digitalWrite(ssr1_pin, HIGH);
+      break;
+    case MFAN_HIGH:
+      digitalWrite(ssr0_pin, LOW);
+      digitalWrite(ssr1_pin, LOW);
+      digitalWrite(ssr2_pin, HIGH);
+      break;    
+    case MFAN_AUTO:
+    default:
+      digitalWrite(ssr0_pin, LOW);
+      digitalWrite(ssr1_pin, LOW);
+      digitalWrite(ssr2_pin, HIGH);
+      break;
+  }
+     
   float res[4*2];
 
   for(int i=0; i<4; i++) {
@@ -233,8 +262,6 @@ void loop() {
       if (fault & MAX31856_FAULT_OPEN)    Serial.println("Thermocouple Open Fault");
     }
   }
-
-  digitalWrite(ssr_pin, LOW);
 
   for(int i=0; i<8; i++) {
     if (i > 0) {
@@ -305,6 +332,12 @@ bool nextion_check_return() {
             Serial.println("Change fan_mode");
           }
           last_fan_mode_change = millis();
+        } else if (comp_id == 0x0f) {
+          mainfan_mode = (mainfan_mode + 1) % 4;
+          if (nextion_debug) {
+            Serial.println("Change mainfan_mode");
+          }
+//          last_fan_mode_change = millis();
         }
       }
     } else if (i > 2 && response[0] == 0x66) { // Current Page Number
@@ -430,7 +463,17 @@ void update_display(float temps[4], int fan_rpm) {
           case FAN_AUTO:
           default: sprintf(nex_buffer, "b1.txt=\"%d RPM\"", fan_rpm); break;
         }
+      }
+      send_to_nextion(nex_buffer);
+    }
 
+    {
+      switch (mainfan_mode) {
+        case MFAN_LOW: sprintf(nex_buffer, "b6.txt=\"Low\""); break;
+        case MFAN_MED: sprintf(nex_buffer, "b6.txt=\"Med\""); break;
+        case MFAN_HIGH: sprintf(nex_buffer, "b6.txt=\"High\""); break;
+        case MFAN_AUTO:
+        default: sprintf(nex_buffer, "b6.txt=\"Auto\""); break;
       }
       send_to_nextion(nex_buffer);
     }
